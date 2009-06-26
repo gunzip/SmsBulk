@@ -1,0 +1,40 @@
+<?php
+// $Id$
+
+/**
+ * @file
+ *
+ *  SMS bulk sender example: usage example of smsbulk hooks
+ */
+
+/**
+ * Implementation of hook_smsbulk_sms_sent().
+ *  logs if sending was successful
+ */
+function smsbulk_example_smsbulk_sms_sent($params) {
+  if ($params['success']) {
+    $msg = t('Successfully sent "%message" to %number (id. %oid)');
+    $arg = array('%oid' => $params['oid'], '%number' => $params['number'], '%message' => $params['text']);
+    drupal_set_message(t($msg, $arg));
+    watchdog('actions', $msg, $arg, WATCHDOG_NOTICE);
+  }
+}
+
+/**
+ * Implementation of hook_smsbulk_number_validate().
+ *  example for "validating" italian numbers
+ *
+ * Smsframework module already provides a hook for validating numbers
+ * but the usage is limited to the current gateway module.
+ * Here we want possibly chained validation functions that do not
+ * depend from the current gateway.
+ */
+function smsbulk_example_smsbulk_validate_number($number) {
+  static $count = 0;
+  $number = preg_replace('/[^0-9]+/', '', $number);
+  if (empty($number)) {
+    drupal_set_message(t('Skipped @count numbers', array('@count' => ++$count)));
+    return FALSE;
+  }
+  return $number;
+}

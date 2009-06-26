@@ -1,0 +1,7 @@
+; $Id$
+name = Sms Bulk Sender
+dependencies[] = views_bulk_operations
+dependencies[] = sms
+description = Send SMS to a contact list using views
+package = SMS Framework
+core = 6.x

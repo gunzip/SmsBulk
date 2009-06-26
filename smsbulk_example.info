@@ -1,0 +1,6 @@
+; $Id$
+name = Sms Bulk Sender example
+dependencies[] = smsbulk
+description = SMS bulk sender example hooks
+package = SMS Framework
+core = 6.x
