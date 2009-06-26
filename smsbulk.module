@@ -85,6 +85,7 @@ function smsbulk_action_info() {
 }
 
 function sms_bulk_get_gateway_options() {
+  $form = array();
   $gateway = sms_default_gateway();
   if (function_exists($gateway['send form'])) {
     $form['gateway']['#tree'] = TRUE;
@@ -116,8 +117,9 @@ function _send_sms_action_form($context) {
 
   $form['sms_limit'] = array(
     '#type' => 'markup',
-    '#value' => '<div id="keystrokes" class="'. $limit .'"><span></span>'.
-      t('@max chars max', array('@max' => $limit)) .'</div>'
+    '#prefix' => '<div id="keystrokes" class="'. $limit .'"><span></span>',
+    '#value' => t('@max chars max', array('@max' => $limit)),
+    '#suffix' => '</div>'
   );
 
   $form += sms_bulk_get_gateway_options();
