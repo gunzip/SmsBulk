@@ -1,3 +1,5 @@
+// $Id$ 
+
 ;if (Drupal && Drupal.jsEnabled) {
   Drupal.behaviors.smsbulk = function(context) {
     var $smstext = $('#edit-sms-text');
