@@ -89,7 +89,7 @@ function sms_bulk_get_gateway_options() {
   $gateway = sms_default_gateway();
   if (function_exists($gateway['send form'])) {
     $form['gateway']['#tree'] = TRUE;
-    $form['gateway'] = array_merge($gateway['send form']($required), $form['gateway']);
+    $form['gateway'] = array_merge($gateway['send form'](FALSE), $form['gateway']);
   }
   return $form;
 }
@@ -110,16 +110,15 @@ function _send_sms_action_form($context) {
     '#required' => TRUE,
   );
   $form['sms_text'] = array(
-      '#type'  => 'textarea',
-      '#title' => 'SMS Text',
-      '#required' => TRUE,
+    '#type'  => 'textarea',
+    '#title' => 'SMS Text',
+    '#required' => TRUE,
   );
-
   $form['sms_limit'] = array(
-    '#type' => 'markup',
-    '#prefix' => '<div id="keystrokes" class="'. $limit .'"><span></span>',
-    '#value' => t('@max chars max', array('@max' => $limit)),
-    '#suffix' => '</div>'
+    '#type'   => 'markup',
+    '#prefix' => '<div id="keystrokes" class="description" limit="'. $limit .'"><span></span>',
+    '#value'  => t('@max chars max', array('@max' => $limit)),
+    '#suffix' => ' ('. t('if you are using tokens then this value is just a hint') .')</div>',
   );
 
   $form += sms_bulk_get_gateway_options();
@@ -142,11 +141,6 @@ function _send_sms_action_validate($form, $form_state) {
   if (empty($form_state['values']['sms_field'])) {
     form_set_error('sms_field', t('This field is required'));
   }
-  $len = drupal_strlen($form_state['values']['sms_text']);
-  if ($len > variable_get('smsbulk_max_chars', SMSBULK_MAX_CHARS)) {
-    form_set_error('sms_text', t('@max char max (you typed: @len)',
-        array('@max' => variable_get('smsbulk_max_chars', SMSBULK_MAX_CHARS), '@len' => $len)));
-  }
 }
 
 function _send_sms_action_submit($form, $form_state) {
@@ -158,36 +152,63 @@ function _send_sms_action_submit($form, $form_state) {
 }
 
 function _smsbulk_send(&$object, &$context, $oid) {
-  $global_ret = TRUE;
   if (empty($context['view'])) {
-    drupal_set_message(t('View was empty'), 'error');
-    return FALSE;
+    drupal_set_message(t('View was empty.'), 'error');
+    return ;
   }
   $rows = &_smsbulk_get_rows($context['view'], $oid);
+  if (empty($rows)) {
+    drupal_set_message(t('You must select at least one row.'), 'error');
+    return ;
+  }
   foreach ($rows as $row) {
+    $ret    = FALSE;
+    $error  = FALSE;
     $number = $row->{$context['sms_field']};
-    /*
-     * hook_smsbulk_number_validate()
-     *  return FALSE if you want to skip this number
-     *
-     *  hint: smsframework module already has per gateway validation hooks
-     */
-    foreach (module_implements('smsbulk_validate_number') as $module) {
-      $function = $module .'_smsbulk_validate_number';
-      $number = $function($number);
-      if ($number == FALSE) {
-        break;
+    if (empty($number)) {
+      $error = t('skipping empty number');
+    }
+    else {
+      /*
+       * hook_smsbulk_number_validate()
+       *  return FALSE if you want to skip this number
+       *
+       *  hint: smsframework module already has per gateway validation hooks
+       */
+      foreach (module_implements('smsbulk_validate_number') as $module) {
+        $function = $module .'_smsbulk_validate_number';
+        $saved_number = $number;
+        $number = $function($number);
+        if ($number == FALSE) {
+          $error = t('skipping malformed number (%number) [%module]',
+              array('%number' => $saved_number, '%module' => $module));
+          break;
+        }
       }
     }
     if (!empty($number)) {
-      if (module_exists('token')) {
-        $sms_text = token_replace($context['sms_text'], 'smsbulk_row', $row);
+      if (sms_validate_number($number)) {
+        $error = t('skipping malformed number (@number) [gateway]', array('@number' => $number));
       }
       else {
-        $sms_text = $context['sms_text'];
+        if (module_exists('token')) {
+          $sms_text = token_replace($context['sms_text'], 'smsbulk_row', $row);
+        }
+        else {
+          $sms_text = $context['sms_text'];
+        }
+        $len = drupal_strlen($sms_text);
+        if ($len > variable_get('smsbulk_max_chars', SMSBULK_MAX_CHARS)) {
+          $error = t('skipping SMS too long (@text) [length=@len]',
+              array('@text' => $sms_text, '@len' => $len));
+        }
+        else {
+          $ret = sms_send($number, $sms_text, $context['gateway_options']);
+          if ($ret == FALSE) {
+            $error = t('error from smsframework/gateway');
+          }
+        }
       }
-      $ret = sms_send($number, $sms_text, $context['gateway_options']);
-      $global_ret = ($global_ret and $ret);
     }
     /*
      * hook_smsbulk_sms_sent()
@@ -200,12 +221,12 @@ function _smsbulk_send(&$object, &$context, $oid) {
       'oid'     => $oid,
       'number'  => $number,
       'text'    => $sms_text,
-      'success' => $ret
+      'success' => (empty($error) ? $ret : FALSE),
+      'error'   => $error
     );
     module_invoke_all('smsbulk_sms_sent', $params);
     unset($row);
   }
-  return $global_ret;
 }
 
 /*

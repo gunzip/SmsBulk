@@ -13,10 +13,21 @@
  */
 function smsbulk_example_smsbulk_sms_sent($params) {
   if ($params['success']) {
-    $msg = t('Successfully sent "%message" to %number (id. %oid)');
+    $msg = t('[%oid] Successfully sent "%message" to %number');
     $arg = array('%oid' => $params['oid'], '%number' => $params['number'], '%message' => $params['text']);
     drupal_set_message(t($msg, $arg));
     watchdog('actions', $msg, $arg, WATCHDOG_NOTICE);
+  }
+  else {
+    $msg = t('[%oid] Failed sending SMS');
+    $arg['%oid'] = $params['oid'];
+    if (!empty($params['number'])) {
+      $msg .= t(' to %number');
+      $arg['%number'] = $params['number'];
+    }
+    $msg .= ': ' . $params['error'];
+    drupal_set_message(t($msg, $arg), 'error');
+    watchdog('actions', $msg, $arg, WATCHDOG_ERROR);
   }
 }
 
@@ -30,10 +41,8 @@ function smsbulk_example_smsbulk_sms_sent($params) {
  * depend from the current gateway.
  */
 function smsbulk_example_smsbulk_validate_number($number) {
-  static $count = 0;
   $number = preg_replace('/[^0-9]+/', '', $number);
   if (empty($number)) {
-    drupal_set_message(t('Skipped @count numbers', array('@count' => ++$count)));
     return FALSE;
   }
   return $number;
