@@ -25,7 +25,7 @@ function smsbulk_example_smsbulk_sms_sent($params) {
       $msg .= t(' to %number');
       $arg['%number'] = $params['number'];
     }
-    $msg .= ': ' . $params['error'];
+    $msg .= ': '. $params['error'];
     drupal_set_message(t($msg, $arg), 'error');
     watchdog('actions', $msg, $arg, WATCHDOG_ERROR);
   }
