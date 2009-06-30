@@ -335,7 +335,8 @@ function _smsbulk_get_rows(&$view, $oid) {
     $results = array();
     $myview = views_get_view($view->vid);
     if (is_object($myview)) {
-      $myview->set_display('default');
+      $display = (empty($view->current_display) ? 'default' : $view->current_display);
+      $myview->set_display($display);
       $myview->set_items_per_page(0);
       $myview->is_cacheable = TRUE;
       $myview->execute();
