@@ -152,81 +152,68 @@ function _send_sms_action_submit($form, $form_state) {
 }
 
 function _smsbulk_send(&$object, &$context, $oid) {
-  if (empty($context['view'])) {
-    drupal_set_message(t('View was empty.'), 'error');
-    return ;
+  $ret    = FALSE;
+  $error  = FALSE;
+  $row    = $context['row'];
+  $number = $row->{$context['sms_field']};
+  if (empty($number)) {
+    $error = t('skipping empty number');
   }
-  $rows = &_smsbulk_get_rows($context['view'], $oid);
-  if (empty($rows)) {
-    drupal_set_message(t('You must select at least one row.'), 'error');
-    return ;
-  }
-  foreach ($rows as $row) {
-    $ret    = FALSE;
-    $error  = FALSE;
-    $number = $row->{$context['sms_field']};
-    if (empty($number)) {
-      $error = t('skipping empty number');
+  else {
+    /*
+     * hook_smsbulk_number_validate()
+     *  return FALSE if you want to skip this number
+     *
+     *  hint: smsframework module already has per gateway validation hooks
+     */
+    foreach (module_implements('smsbulk_validate_number') as $module) {
+      $function = $module .'_smsbulk_validate_number';
+      $saved_number = $number;
+      $number = $function($number);
+      if ($number == FALSE) {
+        $error = t('skipping malformed number (%number) [%module]',
+            array('%number' => $saved_number, '%module' => $module));
+        break;
+      }
+    }
+    if (sms_validate_number($number)) {
+      $error = t('skipping malformed number (@number) [gateway]', array('@number' => $number));
     }
     else {
-      /*
-       * hook_smsbulk_number_validate()
-       *  return FALSE if you want to skip this number
-       *
-       *  hint: smsframework module already has per gateway validation hooks
-       */
-      foreach (module_implements('smsbulk_validate_number') as $module) {
-        $function = $module .'_smsbulk_validate_number';
-        $saved_number = $number;
-        $number = $function($number);
-        if ($number == FALSE) {
-          $error = t('skipping malformed number (%number) [%module]',
-              array('%number' => $saved_number, '%module' => $module));
-          break;
-        }
-      }
-    }
-    if (!empty($number)) {
-      if (sms_validate_number($number)) {
-        $error = t('skipping malformed number (@number) [gateway]', array('@number' => $number));
+      if (module_exists('token')) {
+        $sms_text = token_replace($context['sms_text'], 'smsbulk_row', $row);
       }
       else {
-        if (module_exists('token')) {
-          $sms_text = token_replace($context['sms_text'], 'smsbulk_row', $row);
-        }
-        else {
-          $sms_text = $context['sms_text'];
-        }
-        $len = drupal_strlen($sms_text);
-        if ($len > variable_get('smsbulk_max_chars', SMSBULK_MAX_CHARS)) {
-          $error = t('skipping SMS too long (@text) [length=@len]',
-              array('@text' => $sms_text, '@len' => $len));
-        }
-        else {
-          $ret = sms_send($number, $sms_text, $context['gateway_options']);
-          if ($ret == FALSE) {
-            $error = t('error from smsframework/gateway');
-          }
+        $sms_text = $context['sms_text'];
+      }
+      $len = drupal_strlen($sms_text);
+      if ($len > variable_get('smsbulk_max_chars', SMSBULK_MAX_CHARS)) {
+        $error = t('skipping SMS too long (@text) [length=@len]',
+            array('@text' => $sms_text, '@len' => $len));
+      }
+      else {
+        $ret = sms_send($number, $sms_text, $context['gateway_options']);
+        if ($ret == FALSE) {
+          $error = t('error from smsframework/gateway');
         }
       }
     }
-    /*
-     * hook_smsbulk_sms_sent()
-     *  useful if you want to do stuff after the message is sent
-     *
-     *  hint: errors logging is already implemented into the smsframework
-     */
-    $params = array(
-      'row'     => $row,
-      'oid'     => $oid,
-      'number'  => $number,
-      'text'    => $sms_text,
-      'success' => (empty($error) ? $ret : FALSE),
-      'error'   => $error
-    );
-    module_invoke_all('smsbulk_sms_sent', $params);
-    unset($row);
   }
+  /*
+   * hook_smsbulk_sms_sent()
+   *  useful if you want to do stuff after the message is sent
+   *
+   *  hint: errors logging is already implemented into the smsframework
+   */
+  $params = array(
+    'row'     => $row,
+    'oid'     => $oid,
+    'number'  => $number,
+    'text'    => $sms_text,
+    'success' => (empty($error) ? $ret : FALSE),
+    'error'   => $error
+  );
+  module_invoke_all('smsbulk_sms_sent', $params);
 }
 
 /*
@@ -323,30 +310,6 @@ function _smsbulk_civicrm_contact_load($cid) {
 //    return FALSE;
 //  }
   return $contact;
-}
-
-/*
- * Get ALL results from the view (if you have a decent memory limit).
- * This is a must since views_bulk_operations doesn't pass the actual result to the action hook
- */
-function _smsbulk_get_rows(&$view, $oid) {
-  static $results = NULL;
-  if ($results == NULL) {
-    $results = array();
-    $myview = views_get_view($view->vid);
-    if (is_object($myview)) {
-      $display = (empty($view->current_display) ? 'default' : $view->current_display);
-      $myview->set_display($display);
-      $myview->set_items_per_page(0);
-      $myview->is_cacheable = TRUE;
-      $myview->execute();
-      foreach ($myview->result as $result) {
-        // It's possible that the rows have the same oid (ie. come from the same node)
-        $results[$result->{$view->base_field}][] = $result;
-      }
-    }
-  }
-  return $results[$oid];
 }
 
 /**
