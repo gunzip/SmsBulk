@@ -1,4 +1,3 @@
-; $Id$
 name = Sms Bulk Sender
 dependencies[] = views_bulk_operations
 dependencies[] = sms
