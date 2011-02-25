@@ -1,4 +1,3 @@
-// $Id$ 
 
 ;if (Drupal && Drupal.jsEnabled) {
   Drupal.behaviors.smsbulk = function(context) {
