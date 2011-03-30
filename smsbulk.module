@@ -180,7 +180,7 @@ function _smsbulk_send(&$object, &$context, $oid) {
     }
     else {
       if (module_exists('token')) {
-        $sms_text = token_replace($context['sms_text'], 'smsbulk_row', $row);
+        $sms_text = token_replace($context['sms_text'], 'smsbulk_row', array_filter((array) $row, 'is_string'));
       }
       else {
         $sms_text = $context['sms_text'];
